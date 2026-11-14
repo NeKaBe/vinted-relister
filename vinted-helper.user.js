@@ -5,7 +5,7 @@
 // @icon          https://www.vinted.com/favicon.ico
 // @copyright     2026
 // @license       MIT
-// @version       0.3.3
+// @version       0.3.4
 // @author        NeKaBe
 // @credits       OldRon1977 - idea, batch overlay and pause concept of the Kleinanzeigen helper: https://github.com/OldRon1977/Kleinanzeigen-Anzeigen-duplizieren
 // @match         https://www.vinted.de/member/*
@@ -53,7 +53,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '0.3.3';
+    const VERSION = '0.3.4';
 
     const CFG = {
         // Downloading and uploading photos takes time; generous buffer per item.
@@ -301,7 +301,7 @@
         let o = document.getElementById(OVERLAY_ID);
         if (o) return o;
         o = el('div', [
-            'position:fixed', 'top:20px', 'right:20px', 'width:400px', 'max-height:85vh', 'overflow-y:auto',
+            'position:fixed', 'top:20px', 'right:20px', 'width:400px', 'max-width:calc(100vw - 40px)', 'max-height:85vh', 'overflow-y:auto',
             'background:#fff', 'color:#222', 'border:1px solid #d0d0d0', 'border-radius:8px',
             'box-shadow:0 6px 24px rgba(0,0,0,.18)', 'z-index:100000', 'font:13px system-ui,sans-serif'
         ].join(';'));
@@ -654,6 +654,105 @@
         return NOT_READY_TEXT.test(card.textContent || '');
     }
 
+    // Narrow cards: one "Actions" button with a small menu instead of three buttons.
+    function isCompact(card) {
+        const w = card.getBoundingClientRect().width;
+        return w > 0 && w < 260;
+    }
+
+    const ROW_ACTIONS = [['Relist', '#kvRunRelist', 'relist'], ['Duplicate', '#kvRunDuplicate', 'duplicate'], ['Test', '#kvTest', 'test']];
+    // Vinted's three colours: teal, soft teal, grey.
+    const ROW_STYLES = {
+        relist: 'background:#007782;border:1px solid #007782;color:#fff;',
+        duplicate: 'background:#d9f2f4;border:1px solid #bfe6ea;color:#007782;',
+        test: 'background:#e9ecee;border:1px solid #d3d7da;color:#4a4f54;'
+    };
+    const BTN_BASE = 'min-width:0;white-space:nowrap;padding:7px 2px;font:600 12px system-ui,sans-serif;border-radius:6px;cursor:pointer;';
+    let menuCloserAdded = false;
+
+    // Set once a strip turned out to be invisible (clipped or hidden by Vinted's
+    // layout, e.g. in the phone layout): from then on, buttons sit on the photo.
+    let forceOverlay = false;
+
+    function wantedMode(card) {
+        return forceOverlay ? 'overlay' : (isCompact(card) ? 'compact' : 'full');
+    }
+
+    function buildRow(id, mode) {
+        const compact = mode !== 'full';
+        const row = el('div', mode === 'overlay'
+            ? 'position:absolute;top:8px;left:8px;z-index:5;'
+            : 'box-sizing:border-box;width:100%;padding:0 7px;margin:0 0 3px;position:relative;');
+        row.className = 'kv-row';
+        row.setAttribute('data-kv-mode', mode);
+        const action = function (hash) {
+            return function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openItemTab(id, hash);
+            };
+        };
+        if (!compact) {
+            row.style.display = 'flex';
+            row.style.gap = '6px';
+            ROW_ACTIONS.forEach(function (d) {
+                const b = btn(d[0], false, action(d[1]));
+                b.style.cssText = 'flex:1 1 0;' + BTN_BASE + ROW_STYLES[d[2]];
+                row.appendChild(b);
+            });
+            return row;
+        }
+        const menu = el('div', (mode === 'overlay' ? 'display:none;position:absolute;left:0;top:100%;min-width:130px;' : 'display:none;position:absolute;left:7px;right:7px;top:100%;') + 'z-index:1000;box-sizing:border-box;padding:4px;background:#fff;border:1px solid #d3d7da;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.2);');
+        menu.setAttribute('data-kv-menu', '1');
+        ROW_ACTIONS.forEach(function (d) {
+            const b = btn(d[0], false, action(d[1]));
+            b.style.cssText = 'display:block;width:100%;margin:2px 0;' + BTN_BASE + ROW_STYLES[d[2]];
+            menu.appendChild(b);
+        });
+        const toggle = btn('Actions \u25BE', false, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+        toggle.style.cssText = (mode === 'overlay' ? 'display:block;padding:7px 10px;box-shadow:0 2px 8px rgba(0,0,0,.3);' : 'display:block;width:100%;') + BTN_BASE + ROW_STYLES.relist;
+        row.appendChild(toggle);
+        row.appendChild(menu);
+        if (!menuCloserAdded) {
+            menuCloserAdded = true;
+            document.addEventListener('click', function () {
+                document.querySelectorAll('[data-kv-menu]').forEach(function (m) { m.style.display = 'none'; });
+            });
+        }
+        return row;
+    }
+
+    // Puts the right kind of row into the card (or keeps the existing one) and
+    // checks shortly afterwards that it can actually be seen.
+    function placeRow(card, id) {
+        const mode = wantedMode(card);
+        const old = card.querySelector('.kv-row');
+        if (old && old.getAttribute('data-kv-mode') === mode) return;
+        if (old) old.remove();
+        if (mode === 'overlay' && getComputedStyle(card).position === 'static') card.style.position = 'relative';
+        const row = buildRow(id, mode);
+        card.insertBefore(row, card.firstChild);
+        if (mode === 'overlay') return;
+        setTimeout(function () {
+            if (!row.isConnected) return;
+            const r = row.getBoundingClientRect();
+            const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.width > 0;
+            const cx = r.left + r.width / 2;
+            const cy = r.top + Math.max(r.height, 1) / 2;
+            const hit = onScreen ? document.elementFromPoint(cx, cy) : null;
+            const hidden = r.height < 10 || r.width < 10 || (onScreen && hit && !row.contains(hit));
+            if (hidden) {
+                warn('Button strip not visible, switching to overlay buttons');
+                forceOverlay = true;
+                decorateCards();
+            }
+        }, 150);
+    }
+
     function decorateCards() {
         if (!isOwnProfile()) return;
 
@@ -670,13 +769,17 @@
             items.set(id, entry);
         });
 
-        // Remove strips from cards that turned out to be drafts / in review.
+        // Existing cards: drop the strip from drafts / listings in review, put it
+        // back if Vinted re-rendered the card, and switch between full and compact.
         document.querySelectorAll('[' + CARD_MARK + ']').forEach(function (card) {
-            const entry = items.get(card.getAttribute(CARD_MARK));
+            const id = card.getAttribute(CARD_MARK);
+            const entry = items.get(id);
             if ((entry && entry.draftLink) || isNotReady(card)) {
                 card.querySelectorAll('.kv-row').forEach(function (r) { r.remove(); });
                 card.removeAttribute(CARD_MARK);
+                return;
             }
+            placeRow(card, id);
         });
 
         items.forEach(function (entry, id) {
@@ -686,25 +789,7 @@
             const card = findCard(entry.plainAnchor);
             if (card.getAttribute(CARD_MARK) || isNotReady(card)) return;
             card.setAttribute(CARD_MARK, id);
-            // Vinted's three colours: teal, soft teal, grey.
-            const row = el('div', 'display:flex;gap:6px;box-sizing:border-box;width:100%;padding:0 7px;margin:0 0 3px;');
-            row.className = 'kv-row';
-            const styles = {
-                relist: 'background:#007782;border:1px solid #007782;color:#fff;',
-                duplicate: 'background:#d9f2f4;border:1px solid #bfe6ea;color:#007782;',
-                test: 'background:#e9ecee;border:1px solid #d3d7da;color:#4a4f54;'
-            };
-            [['Relist', '#kvRunRelist', 'relist'], ['Duplicate', '#kvRunDuplicate', 'duplicate'], ['Test', '#kvTest', 'test']]
-                .forEach(function (d) {
-                    const b = btn(d[0], false, function (e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openItemTab(id, d[1]);
-                    });
-                    b.style.cssText = 'flex:1 1 0;min-width:0;white-space:nowrap;padding:7px 2px;font:600 12px system-ui,sans-serif;border-radius:6px;cursor:pointer;' + styles[d[2]];
-                    row.appendChild(b);
-                });
-            card.insertBefore(row, card.firstChild);
+            placeRow(card, id);
         });
     }
 
@@ -738,5 +823,9 @@
         clearTimeout(debounce);
         debounce = setTimeout(function () { addLauncher(); decorateCards(); }, 400);
     }).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(function () { decorateCards(); }, 300);
+    });
     setTimeout(function () { addLauncher(); decorateCards(); }, 1500);
 })();
