@@ -5,7 +5,7 @@
 // @icon          https://www.vinted.com/favicon.ico
 // @copyright     2026
 // @license       MIT
-// @version       0.5.3
+// @version       0.6.0
 // @author        NeKaBe
 // @credits       OldRon1977 - idea and approach (main script + helper), see https://github.com/OldRon1977/Kleinanzeigen-Anzeigen-duplizieren
 // @match         https://www.vinted.de/items/*
@@ -63,7 +63,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '0.5.3';
+    const VERSION = '0.6.0';
 
     const CFG = {
         REQUEST_TIMEOUT_MS: 20000,
@@ -79,10 +79,6 @@
         NOTIFICATION_MS: 5000,
         ISSUES_URL: 'https://github.com/NeKaBe/vinted-relister/issues'
     };
-
-    // Shared protocol with vinted-helper.user.js: keep these values in sync.
-    const LS_RESULT_PREFIX = 'kv-result-';
-    const LS_PENDING_DELETE = 'kv-pending-delete';
 
     const log = (m, d) => console.log('[KV-Relist] ' + m, d === undefined ? '' : d);
     const warn = (m, d) => console.warn('[KV-Relist] ' + m, d === undefined ? '' : d);
@@ -412,25 +408,8 @@
         return o && o.id ? String(o.id) : null;
     }
 
-    // === PENDING ORIGINALS (to delete later) ===
-    function readPending() {
-        try { return JSON.parse(localStorage.getItem(LS_PENDING_DELETE) || '[]'); } catch (e) { return []; }
-    }
-    function writePending(list) {
-        try { localStorage.setItem(LS_PENDING_DELETE, JSON.stringify(list)); } catch (e) { warn('localStorage', e); }
-    }
-    function addPending(entry) {
-        const list = readPending().filter(function (e) { return e.originalId !== entry.originalId; });
-        list.push(entry);
-        writePending(list);
-    }
-    function removePending(originalId) {
-        writePending(readPending().filter(function (e) { return e.originalId !== originalId; }));
-    }
-
     async function deleteOriginal(id) {
         await apiFetch('/items/' + id + '/delete', { method: 'POST' });
-        removePending(id);
         log('Original deleted', id);
     }
 
@@ -608,14 +587,14 @@
     }
 
     // === MAIN FLOW ===
-    // mode: 'duplicate' (copy only) | 'relist' (copy, original deleted afterwards on confirmation)
-    // auto: true when started by the helper via URL hash (result goes back via localStorage)
-    async function run(mode, auto, navigateToDraft) {
+    // mode: 'duplicate' (copy only) | 'relist' (copy, original deleted after a clean check)
+    // navigateToDraft: true when started from the profile (this tab becomes the draft)
+    async function run(mode, navigateToDraft) {
         const id = getItemId();
         setToolbarBusy(true);
         try {
             if (!id) throw coded('no_id', 'No item ID in the URL');
-            log('Start (' + mode + (auto ? ', helper' : '') + ')', { id: id, version: VERSION });
+            log('Start (' + mode + ')', { id: id, version: VERSION });
 
             progressShow('Reading the listing');
             const loaded = await fetchItem(id);
@@ -668,47 +647,33 @@
             const draftId = extractId(res);
             log('Draft created', { draftId: draftId, photos: photoIds.length });
 
-            if (mode === 'relist') {
-                addPending({ originalId: id, title: item.title, draftId: draftId, at: Date.now() });
-            }
-
             progressShow('Checking the draft');
             const checkLines = await verifyDraft(item, draftId);
             if (extrasDropped) checkLines.unshift('Note: extra category fields were rejected by Vinted and left out.');
 
-            if (auto) {
-                log('Draft check', checkLines);
-                try { localStorage.setItem(LS_RESULT_PREFIX + id, 'ok:' + (draftId || '')); } catch (e) { /* ignore */ }
-                notify('Draft created - the helper takes over.', 'success');
-            } else {
-                const clean = checkLines.length === 1 && /no differences/.test(checkLines[0]);
-                let deleted = false;
-                if (mode === 'relist' && clean && draftId) {
-                    // The user confirmed this in the popup; only done after a clean check.
-                    progressShow('Deleting the original listing');
-                    try { await deleteOriginal(id); deleted = true; }
-                    catch (e) {
-                        warn('Deleting the original failed', e);
-                        checkLines.push('Could not delete the original (' + e.message + '). Please delete it yourself.');
-                    }
-                } else if (mode === 'relist') {
-                    checkLines.push('The original was kept because the draft could not be fully verified. Review the draft first.');
+            const clean = checkLines.length === 1 && /no differences/.test(checkLines[0]);
+            let deleted = false;
+            if (mode === 'relist' && clean && draftId) {
+                // The user confirmed this in the popup; only done after a clean check.
+                progressShow('Deleting the original listing');
+                try { await deleteOriginal(id); deleted = true; }
+                catch (e) {
+                    warn('Deleting the original failed', e);
+                    checkLines.push('Could not delete the original (' + e.message + '). Please delete it yourself.');
                 }
-                progressHide();
-                if (navigateToDraft && clean && draftId && (mode !== 'relist' || deleted)) {
-                    // Started from the profile: this tab simply becomes the draft.
-                    location.assign(draftUrl(draftId));
-                    return;
-                }
-                if (draftId) openDraft(draftId);
-                showSuccessPanel(mode, id, item.title, photoIds.length, draftId, checkLines, deleted);
+            } else if (mode === 'relist') {
+                checkLines.push('The original was kept because the draft could not be fully verified. Review the draft first.');
             }
+            progressHide();
+            if (navigateToDraft && clean && draftId && (mode !== 'relist' || deleted)) {
+                // Started from the profile: this tab simply becomes the draft.
+                location.assign(draftUrl(draftId));
+                return;
+            }
+            if (draftId) openDraft(draftId);
+            showSuccessPanel(mode, id, item.title, photoIds.length, draftId, checkLines, deleted);
         } catch (e) {
             err('Failed', e);
-            const code = e.code || 'exception';
-            if (auto && id) {
-                try { localStorage.setItem(LS_RESULT_PREFIX + id, 'error:' + code + ':' + (e.message || '')); } catch (x) { /* ignore */ }
-            }
             showError(e, true);
         } finally {
             progressHide();
@@ -818,8 +783,8 @@
             b.onclick = function (e) { e.preventDefault(); fn(); };
             bar.appendChild(b);
         };
-        mk('Relist', 'primary', 'Creates a draft; you delete the original yourself afterwards', function () { confirmRelist().then(function (ok) { if (ok) run('relist', false, false); }); });
-        mk('Duplicate', 'soft', 'Creates a copy as a draft, the original stays', function () { run('duplicate', false, false); });
+        mk('Relist', 'primary', 'Creates a draft; you delete the original yourself afterwards', function () { confirmRelist().then(function (ok) { if (ok) run('relist', false); }); });
+        mk('Duplicate', 'soft', 'Creates a copy as a draft, the original stays', function () { run('duplicate', false); });
         mk('Test', 'grey', 'Read-only: checks that all data is available', diagnose);
         document.body.appendChild(bar);
         log('Toolbar created (v' + VERSION + ')');
@@ -849,27 +814,16 @@
             GM_registerMenuCommand('Show duplicate toolbar on this page', createToolbar);
         }
 
-        // Started by the helper: the hash selects the mode. The hash is removed
-        // right away so that a reload does not start the process a second time.
-        const hash = location.hash;
-        if (hash === '#kvRelist' || hash === '#kvDuplicate') {
-            history.replaceState(null, '', location.pathname + location.search);
-            await waitFor(function () { return document.readyState === 'complete'; }, 10000);
-            await new Promise(function (r) { setTimeout(r, 1500); });
-            run(hash === '#kvRelist' ? 'relist' : 'duplicate', true);
-            return;
-        }
-
-        // Started from a card button on the profile: show the preview / test
-        // here, so the user decides with one more click.
-        const previewHashes = { '#kvRunDuplicate': 'duplicate', '#kvRunRelist': 'relist', '#kvTest': 'test' };
-        if (previewHashes[hash]) {
+        // Started from a card button on the profile: the hash selects the action.
+        // It is removed right away so that a reload does not start it again.
+        const actionHashes = { '#kvRunDuplicate': 'duplicate', '#kvRunRelist': 'relist', '#kvTest': 'test' };
+        if (actionHashes[hash]) {
             history.replaceState(null, '', location.pathname + location.search);
             await waitFor(function () { return document.readyState === 'complete'; }, 10000);
             await new Promise(function (r) { setTimeout(r, 1000); });
-            if (previewHashes[hash] === 'test') { createToolbar(); diagnose(); }
-            else if (previewHashes[hash] === 'relist') confirmRelist().then(function (ok) { if (ok) run('relist', false, true); });
-            else run('duplicate', false, true);
+            if (actionHashes[hash] === 'test') { createToolbar(); diagnose(); }
+            else if (actionHashes[hash] === 'relist') confirmRelist().then(function (ok) { if (ok) run('relist', true); });
+            else run('duplicate', true);
             return;
         }
 
