@@ -13,7 +13,6 @@ Relist or duplicate your own Vinted listings with one click: all photos, descrip
 - **Relist** asks once in a popup, creates the draft, checks it against the original and only then deletes the original. If the check finds any difference, the original is kept.
 - **Duplicate** never deletes anything. Use it when you want to keep the favourites of the old listing.
 - **Test** is read-only. It shows whether all data of a listing is available.
-- **Batch relist** (button at the bottom left of your profile): select several listings and process them one after another with a random pause.
 - Works with data, not with screen text, so it is independent of the language of the Vinted site and copies category-specific fields too.
 - Buttons are not shown on drafts, listings in review or on edit pages.
 
@@ -22,7 +21,7 @@ Relist or duplicate your own Vinted listings with one click: all photos, descrip
 1. Install a userscript manager for your browser (see [Supported browsers](#supported-browsers)), e.g. [Tampermonkey](https://www.tampermonkey.net/).
 2. Click both links. Your userscript manager offers to install the script:
    - **[Install the relister script](https://raw.githubusercontent.com/NeKaBe/vinted-relister/main/vinted-relist.user.js)** (buttons on item pages, does the actual work)
-   - **[Install the helper script](https://raw.githubusercontent.com/NeKaBe/vinted-relister/main/vinted-helper.user.js)** (buttons on your profile and batch relist)
+   - **[Install the helper script](https://raw.githubusercontent.com/NeKaBe/vinted-relister/main/vinted-helper.user.js)** (the buttons on your profile)
 3. Chrome and other Chromium browsers only: if scripts do not run, enable "Allow User Scripts" (or Developer mode) for Tampermonkey on `chrome://extensions`.
 4. The first time photos are copied, Tampermonkey asks for permission to connect to `vinted.net` (Vinted's image host). Allow it.
 5. Log in to Vinted and open your profile.
@@ -39,8 +38,8 @@ Updates arrive automatically through your userscript manager.
 |---|---|---|
 | Chrome, Edge, Brave, Opera | Tampermonkey (free) | Enable "Allow User Scripts" / Developer mode if needed. |
 | Firefox | Tampermonkey or Violentmonkey (free) | Usually works without extra setup. |
-| Safari (Mac) | Tampermonkey (paid app) or Userscripts (free) | Enable the extension in Safari settings. Allow pop-ups for Vinted, since the helper opens one tab per listing. |
-| Safari (iPhone/iPad) | Tampermonkey (paid) or Userscripts (free) | Much less reliable, not recommended for batch relisting. |
+| Safari (Mac) | Tampermonkey (paid app) or Userscripts (free) | Enable the extension in Safari settings. Allow pop-ups for Vinted, since each button opens the listing in a new tab. |
+| Safari (iPhone/iPad) | Tampermonkey (paid) or Userscripts (free) | Much less reliable, not recommended. |
 
 Works on the common Vinted country sites (vinted.de, .com, .co.uk, .fr, .it, .es, .nl, .be, .at, .pl, .cz, .lt, .pt, .lu, .se, .dk, .fi, .sk, .hu, .ro, .hr). If yours is missing, add another `@match` line to both scripts.
 
@@ -50,15 +49,13 @@ Works on the common Vinted country sites (vinted.de, .com, .co.uk, .fr, .it, .es
 
 **On a single item page:** the same three buttons appear at the bottom right.
 
-**Several listings:** on your profile click *Batch relist* (bottom left), choose the listings and the mode, set the pause and press Start.
-
-If the buttons do not show up, reload the page first (the scripts start on a full page load, not on in-site navigation). If they are still missing, use the userscript manager's menu entry for the script.
+If the buttons do not show up, reload the page first (the scripts start on a full page load, not on in-site navigation). If they are still missing, use the userscript manager's menu entry for the script ("Enable buttons on this page" / "Show duplicate toolbar on this page").
 
 ## Safety principles
 
 - **Nothing is published automatically.** The script only creates a draft. You review and publish it yourself.
 - **Your own listings only.** Other people's listings are refused.
-- **The original is deleted only if you ask for it:** *Relist* deletes it after your confirmation and only if the created draft matches the original. *Duplicate* and *Test* never delete anything. In batch mode nothing is deleted automatically; you delete originals from the "Pending originals" list.
+- **The original is deleted only if you ask for it:** *Relist* deletes it after your confirmation and only if the created draft matches the original. *Duplicate* and *Test* never delete anything. There is deliberately no bulk mode: every listing is handled by its own click.
 - **If anything fails, the original is left untouched.**
 - **Deleting is permanent**, and views and favourites of the deleted listing are lost. Try *Relist* on a listing you do not care about first.
 
@@ -66,7 +63,7 @@ If the buttons do not show up, reload the page first (the scripts start on a ful
 
 - **Unofficial interface.** Vinted offers no public API for creating listings. These scripts use the same endpoints as the Vinted website. If Vinted changes them, the scripts can stop working. Use the *Test* button and the browser console (F12, filter `KV-`) to narrow down problems.
 - **Tested so far** by the author on shoes, bags and clothing. Other categories (books, electronics, toys, ...) should work because everything is copied from the original data and checked afterwards, but have not been tested widely. Please report what you find.
-- **Terms of service.** Automation may violate Vinted's terms and in the worst case lead to an account restriction. Use at your own risk, keep pauses moderate and do not relist in bulk.
+- **Terms of service.** Automation may violate Vinted's terms and in the worst case lead to an account restriction. Use at your own risk, and do not relist large numbers of listings in a short time.
 - **Not affiliated with Vinted.** "Vinted" is a trademark of its owner. This is an independent hobby project.
 - No warranty, no liability (see the license).
 
@@ -84,7 +81,7 @@ If this saves you time, you can support the project: **[☕ ko-fi.com/nekabe](ht
 
 ## Acknowledgements
 
-Thank you to **[OldRon1977](https://github.com/OldRon1977)** for [Kleinanzeigen-Anzeigen-duplizieren](https://github.com/OldRon1977/Kleinanzeigen-Anzeigen-duplizieren). That project was the inspiration for this one: the idea of a helper script plus a worker script, the selection overlay and the random pause between items. All code here was written from scratch for Vinted, but the approach would not exist without that original work.
+Thank you to **[OldRon1977](https://github.com/OldRon1977)** for [Kleinanzeigen-Anzeigen-duplizieren](https://github.com/OldRon1977/Kleinanzeigen-Anzeigen-duplizieren). That project was the inspiration for this one: the idea of a helper script plus a worker script. All code here was written from scratch for Vinted, but the approach would not exist without that original work.
 
 ## About this project
 
